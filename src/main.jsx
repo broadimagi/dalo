@@ -473,10 +473,10 @@ function App() {
     <main className="app-shell">
       <header className="top-bar">
         <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true">M</div>
+          <div className="brand-mark" aria-hidden="true">D</div>
           <div>
-            <div className="header-title">myDalo Portal</div>
-            <div className="header-kicker">My Presence / My Attendance</div>
+            <div className="header-title">Dalo</div>
+            <div className="header-kicker">My Presence / Attendance</div>
           </div>
         </div>
         <div className="header-controls">
@@ -502,10 +502,10 @@ function App() {
           </div>
         )}
         <div className="checkin-panel">
-          <div className="brand-mark hero-mark" aria-hidden="true">M</div>
+          <div className="brand-mark hero-mark" aria-hidden="true">D</div>
           <div>
             <p className="eyebrow">Dalo</p>
-            <h1 id="checkin-title">My Presence / My Attendance</h1>
+            <h1 id="checkin-title">My Presence / Attendance</h1>
           </div>
           <form onSubmit={checkName} className="search-form">
             <div className="search-box">
