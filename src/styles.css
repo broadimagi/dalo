@@ -7,8 +7,8 @@
   --bg-gradient:
     radial-gradient(circle at top left, rgba(14, 116, 144, 0.22), transparent 34rem),
     linear-gradient(135deg, #071018 0%, #101624 54%, #172033 100%);
-  --panel-dark: rgba(16, 22, 36, 0.94);
-  --panel-light: rgba(255, 255, 255, 0.78);
+  --panel-dark: rgba(10, 16, 28, 0.58);
+  --panel-light: rgba(255, 255, 255, 0.46);
   --panel-line: #273149;
   --muted-text: #9ca7b8;
   font-family: "Open Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -51,7 +51,11 @@ button {
   padding: 12px 20px;
   position: relative;
   z-index: 5;
-  background: rgba(16, 22, 36, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 16, 28, 0.58);
+  backdrop-filter: blur(24px) saturate(145%);
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.2);
 }
 
 .mode-pill,
@@ -61,8 +65,8 @@ button {
 .front-stat {
   border: 1px solid var(--panel-line);
   background: var(--panel-dark);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(28px) saturate(155%);
+  -webkit-backdrop-filter: blur(28px) saturate(155%);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.34);
 }
 
@@ -74,6 +78,19 @@ button {
   border-color: rgba(15, 23, 42, 0.12);
   background: var(--panel-light);
   box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+}
+
+.bg-light-contrast .top-bar {
+  border-bottom-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.bg-light-contrast .header-title {
+  color: #0f172a;
+}
+
+.bg-light-contrast .header-kicker {
+  color: #475569;
 }
 
 .brand-lockup {
@@ -294,6 +311,18 @@ h1 {
   font-weight: 900;
   line-height: 0.98;
   letter-spacing: 0;
+}
+
+.bg-light-contrast .checkin-panel h1 {
+  color: #0f172a;
+}
+
+.bg-light-contrast .footer {
+  color: rgba(15, 23, 42, 0.76);
+}
+
+.bg-light-contrast .footer a {
+  color: #0f172a;
 }
 
 .search-form {

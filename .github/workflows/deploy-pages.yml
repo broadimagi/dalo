@@ -40,13 +40,19 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Assemble static site
+        run: |
+          mkdir site
+          cp index.html site/index.html
+          cp -R docs site/docs
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
 
   deploy:
     environment:

@@ -144,14 +144,26 @@ function App() {
     const r = parseInt(safeHex.slice(1, 3), 16);
     const g = parseInt(safeHex.slice(3, 5), 16);
     const b = parseInt(safeHex.slice(5, 7), 16);
-    document.documentElement.style.setProperty("--primary-color", `rgb(${r}, ${g}, ${b})`);
+    const lightBackground = 0.299 * r + 0.587 * g + 0.114 * b > 155;
+    const max = Math.max(r, g, b) / 255;
+    const min = Math.min(r, g, b) / 255;
+    const delta = max - min;
+    let hue = 0;
+    if (delta) {
+      if (max === r / 255) hue = 60 * (((g - b) / 255 / delta) % 6);
+      else if (max === g / 255) hue = 60 * ((b - r) / 255 / delta + 2);
+      else hue = 60 * ((r - g) / 255 / delta + 4);
+    }
+    hue = (hue + 360) % 360;
+    const saturation = Math.max(42, Math.round(delta ? (delta / (1 - Math.abs(max + min - 1))) * 100 : 0));
+    const baseLightness = lightBackground ? 70 : 34;
     document.documentElement.style.setProperty(
       "--bg-gradient",
-      `radial-gradient(circle at top left, rgba(${r}, ${g}, ${b}, 0.22), transparent 34rem), linear-gradient(135deg, #071018 0%, #101624 54%, #172033 100%)`
+      `radial-gradient(circle at 14% 18%, hsla(${(hue + 34) % 360}, ${Math.min(100, saturation + 12)}%, ${Math.min(88, baseLightness + 18)}%, 0.82), transparent 42%), radial-gradient(circle at 86% 76%, hsla(${(hue + 308) % 360}, ${saturation}%, ${Math.max(18, baseLightness - 10)}%, 0.72), transparent 46%), linear-gradient(135deg, hsl(${hue}, ${saturation}%, ${baseLightness}%) 0%, hsl(${(hue + 18) % 360}, ${Math.min(100, saturation + 8)}%, ${Math.max(16, baseLightness - 14)}%) 100%)`
     );
     document.body.style.backgroundImage = "";
-    document.body.classList.remove("bg-light-contrast");
-    document.body.classList.add("bg-dark-contrast");
+    document.body.classList.toggle("bg-light-contrast", lightBackground);
+    document.body.classList.toggle("bg-dark-contrast", !lightBackground);
     if (persist) {
       localStorage.removeItem("customThemePicture");
       setHasImageBackground(false);
