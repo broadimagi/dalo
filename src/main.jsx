@@ -155,11 +155,16 @@ function App() {
       else hue = 60 * ((r - g) / 255 / delta + 4);
     }
     hue = (hue + 360) % 360;
-    const saturation = Math.max(42, Math.round(delta ? (delta / (1 - Math.abs(max + min - 1))) * 100 : 0));
-    const baseLightness = lightBackground ? 70 : 34;
+    const lightness = (max + min) / 2;
+    const saturation = Math.round(
+      delta ? (delta / (1 - Math.abs(2 * lightness - 1))) * 100 : 0
+    );
+    const companionLightness = lightBackground
+      ? Math.max(22, Math.round(lightness * 100) - 30)
+      : Math.min(74, Math.round(lightness * 100) + 24);
     document.documentElement.style.setProperty(
       "--bg-gradient",
-      `radial-gradient(circle at 14% 18%, hsla(${(hue + 34) % 360}, ${Math.min(100, saturation + 12)}%, ${Math.min(88, baseLightness + 18)}%, 0.82), transparent 42%), radial-gradient(circle at 86% 76%, hsla(${(hue + 308) % 360}, ${saturation}%, ${Math.max(18, baseLightness - 10)}%, 0.72), transparent 46%), linear-gradient(135deg, hsl(${hue}, ${saturation}%, ${baseLightness}%) 0%, hsl(${(hue + 18) % 360}, ${Math.min(100, saturation + 8)}%, ${Math.max(16, baseLightness - 14)}%) 100%)`
+      `linear-gradient(135deg, rgb(${r}, ${g}, ${b}) 0%, hsl(${hue}, ${saturation}%, ${companionLightness}%) 100%)`
     );
     document.body.style.backgroundImage = "";
     document.body.classList.toggle("bg-light-contrast", lightBackground);
