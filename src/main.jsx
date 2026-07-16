@@ -504,7 +504,7 @@ function App() {
         <div className="checkin-panel">
           <div className="brand-mark hero-mark" aria-hidden="true">M</div>
           <div>
-            <p className="eyebrow">myDalo</p>
+            <p className="eyebrow">Dalo</p>
             <h1 id="checkin-title">My Presence / My Attendance</h1>
           </div>
           <form onSubmit={checkName} className="search-form">
