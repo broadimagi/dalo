@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserQRCodeReader } from "@zxing/browser";
 import {
   Check,
   ChevronLeft,
@@ -657,54 +658,32 @@ function QrScanner({ onScan }) {
   }, [onScan]);
 
   useEffect(() => {
-    let stream;
-    let timer;
+    let controls;
     let stopped = false;
 
     async function startScanner() {
-      if (!("BarcodeDetector" in window)) {
-        setStatus("QR scanning is not supported by this browser. Please use the search field instead.");
-        return;
-      }
       if (!navigator.mediaDevices?.getUserMedia) {
         setStatus("Camera access is not available on this device.");
         return;
       }
 
       try {
-        const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false
+        const reader = new BrowserQRCodeReader(undefined, {
+          delayBetweenScanAttempts: 180
         });
-        if (stopped) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        const video = videoRef.current;
-        video.srcObject = stream;
-        await video.play();
         setStatus("Point the camera at the guest QR code.");
-
-        async function detect() {
-          if (stopped) return;
-          try {
-            const codes = await detector.detect(video);
-            const value = codes[0]?.rawValue?.trim();
-            if (value) {
-              stopped = true;
-              stream.getTracks().forEach((track) => track.stop());
-              onScanRef.current(value);
-              return;
-            }
-          } catch {
-            // The video may not have a readable frame yet; continue scanning.
+        controls = await reader.decodeFromConstraints(
+          { video: { facingMode: { ideal: "environment" } }, audio: false },
+          videoRef.current,
+          (result, _error, scanControls) => {
+            const value = result?.getText()?.trim();
+            if (!value || stopped) return;
+            stopped = true;
+            scanControls.stop();
+            onScanRef.current(value);
           }
-          timer = window.setTimeout(detect, 180);
-        }
-
-        detect();
+        );
+        if (stopped) controls.stop();
       } catch (error) {
         const denied = error?.name === "NotAllowedError";
         setStatus(denied
@@ -716,8 +695,7 @@ function QrScanner({ onScan }) {
     startScanner();
     return () => {
       stopped = true;
-      window.clearTimeout(timer);
-      stream?.getTracks().forEach((track) => track.stop());
+      controls?.stop();
     };
   }, []);
 
