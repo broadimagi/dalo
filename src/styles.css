@@ -486,6 +486,7 @@ h1 {
 
 .suggestion-card {
   width: 100%;
+  min-width: 0;
   display: grid;
   gap: 12px;
   padding: 16px;
@@ -502,9 +503,15 @@ h1 {
 
 .suggestion-grid,
 .guest-fields {
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
   gap: 14px;
+}
+
+.suggestion-grid > div,
+.guest-fields > div {
+  min-width: 0;
 }
 
 .suggestion-grid span,
@@ -543,6 +550,7 @@ h1 {
 .success-layout,
 .settings-layout,
 .masterlist-layout {
+  min-width: 0;
   display: grid;
   gap: 18px;
 }
@@ -570,6 +578,14 @@ h1 {
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #b91c1c;
+}
+
+.blocked-note strong,
+.blocked-note span,
+.status-strip strong,
+.status-strip span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .success-icon {
@@ -814,7 +830,8 @@ tr:last-child td {
 
   .front-dashboard,
   .dashboard {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
   }
 
   .checkin-panel {
@@ -847,6 +864,19 @@ tr:last-child td {
   .suggestion-grid,
   .guest-fields {
     grid-template-columns: 1fr;
+  }
+
+  .suggestion-grid strong,
+  .guest-fields strong {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
+
+  .blocked-note,
+  .status-strip {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .settings-grid,
@@ -883,15 +913,31 @@ tr:last-child td {
 
 @media (max-width: 420px) {
   .top-actions {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 
   .front-dashboard,
   .dashboard {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .front-stat {
+    min-height: 68px;
+    padding: 8px 3px;
+  }
+
+  .front-stat span {
+    font-size: 8px;
+    letter-spacing: 0.03em;
+  }
+
+  .dashboard .front-stat span {
+    font-size: 7px;
+    letter-spacing: 0;
   }
 
   .front-stat strong {
-    font-size: 21px;
+    font-size: 18px;
   }
 }
