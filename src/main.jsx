@@ -9,6 +9,7 @@ import {
   ListChecks,
   Lock,
   RefreshCw,
+  ScanLine,
   Search,
   Settings,
   Trash2,
@@ -271,13 +272,12 @@ function App() {
     reader.readAsText(file);
   }
 
-  function checkName(event) {
-    event.preventDefault();
+  function searchGuest(rawValue) {
     if (!masterlist.length) {
       openModal("message", "Not Found", { message: "No data has been uploaded or linked." });
       return;
     }
-    const value = query.toLowerCase().trim();
+    const value = rawValue.toLowerCase().trim();
     if (!value) return;
     const searchColumns = dataColumns(settings.suggestionColumns);
     const matches = masterlist
@@ -296,6 +296,16 @@ function App() {
       return;
     }
     openModal("suggestions", "Select Guest Profile", { matches });
+  }
+
+  function checkName(event) {
+    event.preventDefault();
+    searchGuest(query);
+  }
+
+  function handleQrScan(value) {
+    setQuery(value);
+    searchGuest(value);
   }
 
   function selectSuggestion(index) {
@@ -505,7 +515,7 @@ function App() {
           <div className="brand-mark hero-mark" aria-hidden="true">D</div>
           <div>
             <p className="eyebrow">Dalo</p>
-            <h1 id="checkin-title">My Presence / Attendance</h1>
+            <h1 id="checkin-title">My Presence /  Attendance</h1>
           </div>
           <form onSubmit={checkName} className="search-form">
             <div className="search-box">
@@ -520,6 +530,13 @@ function App() {
             </div>
             <button className="primary-button" type="submit">
               <Check size={19} /> Check
+            </button>
+            <button
+              className="scan-button"
+              type="button"
+              onClick={() => openModal("scanner", "Scan Guest QR Code")}
+            >
+              <ScanLine size={19} /> Scan QR
             </button>
           </form>
           <button className="subtle-button" onClick={() => setQuery("")}>
@@ -539,6 +556,7 @@ function App() {
       {modal && (
         <Modal title={modal.title} onClose={closeModal}>
           {modal.type === "message" && <MessageModal message={modal.message} />}
+          {modal.type === "scanner" && <QrScanner onScan={handleQrScan} />}
           {modal.type === "suggestions" && (
             <SuggestionsModal
               matches={modal.matches}
@@ -627,6 +645,91 @@ function Modal({ title, children, onClose }) {
 
 function MessageModal({ message }) {
   return <p className="modal-message">{message}</p>;
+}
+
+function QrScanner({ onScan }) {
+  const videoRef = useRef(null);
+  const onScanRef = useRef(onScan);
+  const [status, setStatus] = useState("Starting camera...");
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
+
+  useEffect(() => {
+    let stream;
+    let timer;
+    let stopped = false;
+
+    async function startScanner() {
+      if (!("BarcodeDetector" in window)) {
+        setStatus("QR scanning is not supported by this browser. Please use the search field instead.");
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus("Camera access is not available on this device.");
+        return;
+      }
+
+      try {
+        const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
+        });
+        if (stopped) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        const video = videoRef.current;
+        video.srcObject = stream;
+        await video.play();
+        setStatus("Point the camera at the guest QR code.");
+
+        async function detect() {
+          if (stopped) return;
+          try {
+            const codes = await detector.detect(video);
+            const value = codes[0]?.rawValue?.trim();
+            if (value) {
+              stopped = true;
+              stream.getTracks().forEach((track) => track.stop());
+              onScanRef.current(value);
+              return;
+            }
+          } catch {
+            // The video may not have a readable frame yet; continue scanning.
+          }
+          timer = window.setTimeout(detect, 180);
+        }
+
+        detect();
+      } catch (error) {
+        const denied = error?.name === "NotAllowedError";
+        setStatus(denied
+          ? "Camera permission was denied. Allow camera access and try again."
+          : "The camera could not be opened. Please try again or use the search field.");
+      }
+    }
+
+    startScanner();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  return (
+    <div className="qr-scanner">
+      <div className="qr-video-wrap">
+        <video ref={videoRef} className="qr-video" playsInline muted />
+        <div className="qr-guide" aria-hidden="true" />
+      </div>
+      <p className="qr-status">{status}</p>
+    </div>
+  );
 }
 
 function SuggestionsModal({ matches, columns, onSelect, isChecked }) {
