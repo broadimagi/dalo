@@ -24,6 +24,59 @@ const API_URL =
 const DEFAULT_THEME_COLOR = "#7dd3fc";
 const ADMIN_PASSWORD = "Broadimagi";
 const RESERVED_COLUMNS = ["rowId", "Status", "Time", "UID", "status", "time"];
+const ROUTER_SETTING_KEYS = ["isActive", "syncTime", "Masterlist", "Suggestions", "Confirm", "Notify"];
+const DEFAULT_SYNC_SECONDS = 60;
+const MIN_SYNC_SECONDS = 15;
+const MAX_SYNC_SECONDS = 3600;
+
+const getCaseInsensitiveValue = (object, key) => {
+  if (!object || typeof object !== "object") return undefined;
+  const actualKey = Object.keys(object).find((candidate) => candidate.toLowerCase() === key.toLowerCase());
+  return actualKey ? object[actualKey] : undefined;
+};
+
+const hasRouterSettings = (object) =>
+  ROUTER_SETTING_KEYS.some((key) => getCaseInsensitiveValue(object, key) !== undefined);
+
+const normalizeLivePayload = (payload) => {
+  if (Array.isArray(payload)) return { rows: payload, headers: null, router: null, error: null };
+  if (!payload || typeof payload !== "object") return { rows: [], headers: null, router: null, error: "Invalid server response." };
+
+  const rows = payload.rows || payload.data || payload.records || payload.masterlist;
+  const routerCandidates = [payload.router, payload.masterRouter, payload.config, payload.settings, payload];
+  const router = routerCandidates.find(hasRouterSettings) || null;
+  return {
+    rows: Array.isArray(rows) ? rows : [],
+    headers: Array.isArray(payload.headers) ? payload.headers : null,
+    router,
+    error: payload.error || null
+  };
+};
+
+const isRouterActive = (router) => {
+  const value = getCaseInsensitiveValue(router, "isActive");
+  if (value === undefined || value === null || value === "") return true;
+  if (typeof value === "boolean") return value;
+  return !["false", "0", "no", "off"].includes(String(value).trim().toLowerCase());
+};
+
+const getRouterSyncSeconds = (router) => {
+  const value = Number(getCaseInsensitiveValue(router, "syncTime"));
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_SYNC_SECONDS;
+  return Math.min(MAX_SYNC_SECONDS, Math.max(MIN_SYNC_SECONDS, Math.round(value)));
+};
+
+const isInactiveError = (error) => /inactive|deactivated/i.test(String(error || ""));
+
+const columnsFromRouterValue = (value, availableColumns, single = false) => {
+  if (value === undefined || value === null || String(value).trim() === "") return [];
+  const indexes = String(value)
+    .split(",")
+    .map((item) => Number.parseInt(item.trim(), 10))
+    .filter((index) => Number.isInteger(index) && index >= 1 && index <= availableColumns.length);
+  const columns = [...new Set(indexes.map((index) => availableColumns[index - 1]))];
+  return single ? columns.slice(0, 1) : columns;
+};
 
 const getInitial = (key, fallback) => {
   try {
@@ -62,6 +115,7 @@ function App() {
   const [identityUnlocked, setIdentityUnlocked] = useState(false);
   const [eventId, setEventId] = useState(() => localStorage.getItem("connectedEventId") || "");
   const [password, setPassword] = useState(() => localStorage.getItem("connectedPassword") || "");
+  const [syncTimeSeconds, setSyncTimeSeconds] = useState(DEFAULT_SYNC_SECONDS);
   const [hasImageBackground, setHasImageBackground] = useState(() => !!localStorage.getItem("customThemePicture"));
   const csvInputRef = useRef(null);
   const bgInputRef = useRef(null);
@@ -114,12 +168,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(runBackgroundSyncHeartbeat, 15000);
+    const interval = setInterval(runBackgroundSyncHeartbeat, syncTimeSeconds * 1000);
     return () => clearInterval(interval);
-  }, [isLiveMode, modal, eventId, password, masterlist, settings]);
+  }, [isLiveMode, modal, eventId, password, masterlist, settings, syncTimeSeconds]);
 
   const dataColumns = (preferred) => {
-    if (preferred?.length) return preferred;
+    if (Array.isArray(preferred)) return preferred;
     return headers;
   };
 
@@ -236,6 +290,24 @@ function App() {
     return next;
   }
 
+  function applyRouterColumnSettings(rows, router, sheetHeaders = null) {
+    if (!rows.length || !router) return ensureDefaultColumnSettings(rows);
+    const availableColumns = Object.keys(rows[0]).filter((key) => !RESERVED_COLUMNS.includes(key));
+    const indexedColumns = Array.isArray(sheetHeaders) && sheetHeaders.length ? sheetHeaders : availableColumns;
+    const getColumns = (key, single = false) =>
+      columnsFromRouterValue(getCaseInsensitiveValue(router, key), indexedColumns, single)
+        .filter((column) => availableColumns.includes(column));
+    const next = {
+      ...settings,
+      showColumns: getColumns("Masterlist"),
+      suggestionColumns: getColumns("Suggestions"),
+      confirmColumns: getColumns("Confirm"),
+      notificationColumns: getColumns("Notify", true)
+    };
+    saveSettings(next);
+    return next;
+  }
+
   function parseCsv(text) {
     const rows = text.split(/\r?\n/).filter(Boolean);
     const fileHeaders = rows[0].split(",").map((value) => value.trim());
@@ -322,18 +394,32 @@ function App() {
       const response = await fetch(
         `${API_URL}?eventId=${encodeURIComponent(nextEventId)}&password=${encodeURIComponent(nextPassword)}`
       );
-      const data = await response.json();
-      if (data.error) {
+      const payload = normalizeLivePayload(await response.json());
+      if (payload.error) {
         setIsLiveMode(false);
-        openModal("message", "Access Denied", { message: `Google API Error: ${data.error}` });
+        if (silent && isInactiveError(payload.error)) {
+          localStorage.removeItem("connectedEventId");
+          localStorage.removeItem("connectedPassword");
+          setEventId("");
+          setPassword("");
+        }
+        openModal("message", isInactiveError(payload.error) ? "Event Inactive" : "Access Denied", {
+          message: isInactiveError(payload.error) ? "This event is currently inactive and cannot be connected." : `Google API Error: ${payload.error}`
+        });
         return;
       }
+      if (!isRouterActive(payload.router)) {
+        setIsLiveMode(false);
+        openModal("message", "Event Inactive", { message: "This event is currently inactive and cannot be connected." });
+        return;
+      }
+      setSyncTimeSeconds(getRouterSyncSeconds(payload.router));
       localStorage.setItem("connectedEventId", nextEventId);
       localStorage.setItem("connectedPassword", nextPassword);
       setEventId(nextEventId);
       setPassword(nextPassword);
-      ensureDefaultColumnSettings(data);
-      setMasterlist(data);
+      applyRouterColumnSettings(payload.rows, payload.router, payload.headers);
+      setMasterlist(payload.rows);
       setIsLiveMode(true);
       if (!silent) closeModal();
     } catch {
@@ -347,8 +433,30 @@ function App() {
     if (!eventId || !password) return;
     try {
       const response = await fetch(`${API_URL}?eventId=${encodeURIComponent(eventId)}&password=${encodeURIComponent(password)}`);
-      const freshData = await response.json();
-      if (!Array.isArray(freshData)) return;
+      const payload = normalizeLivePayload(await response.json());
+      if (payload.error) {
+        if (isInactiveError(payload.error)) {
+          localStorage.removeItem("connectedEventId");
+          localStorage.removeItem("connectedPassword");
+          setIsLiveMode(false);
+          setEventId("");
+          setPassword("");
+          openModal("message", "Event Inactive", { message: "This event has been deactivated and disconnected." });
+        }
+        return;
+      }
+      if (!payload.rows.length) return;
+      if (!isRouterActive(payload.router)) {
+        localStorage.removeItem("connectedEventId");
+        localStorage.removeItem("connectedPassword");
+        setIsLiveMode(false);
+        setEventId("");
+        setPassword("");
+        openModal("message", "Event Inactive", { message: "This event has been deactivated and disconnected." });
+        return;
+      }
+      setSyncTimeSeconds(getRouterSyncSeconds(payload.router));
+      const freshData = payload.rows;
       const localMap = new Map(masterlist.map((row) => [String(row.rowId), row]));
       freshData.forEach((freshRow) => {
         const localMatch = localMap.get(String(freshRow.rowId));
@@ -368,7 +476,12 @@ function App() {
       openModal("message", "Verifying", { message: "Checking database state..." });
       try {
         const verifyResponse = await fetch(`${API_URL}?eventId=${encodeURIComponent(eventId)}&password=${encodeURIComponent(password)}`);
-        const freshestData = await verifyResponse.json();
+        const verifyPayload = normalizeLivePayload(await verifyResponse.json());
+        if (verifyPayload.error || !isRouterActive(verifyPayload.router)) {
+          openModal("message", "Check-In Blocked", { message: verifyPayload.error || "This event is currently inactive." });
+          return;
+        }
+        const freshestData = verifyPayload.rows;
         const freshRow = freshestData.find((row) => String(row.rowId) === String(targetGuest.rowId));
         if (freshRow && isChecked(freshRow)) {
           openModal("message", "Overwrite Blocked", { message: "Another operator already checked this guest in." });
@@ -397,7 +510,7 @@ function App() {
   }
 
   function notifyCheckIn(row) {
-    const columns = settings.notificationColumns?.length ? settings.notificationColumns : dataColumns(settings.showColumns);
+    const columns = Array.isArray(settings.notificationColumns) ? settings.notificationColumns : [];
     const label = columns.map((column) => row[column]).filter(Boolean).join(" - ") || row.Name || "Guest Profile";
     const id = crypto.randomUUID?.() || String(Date.now());
     setToastItems((items) => [...items.slice(-4), { id, label }]);
