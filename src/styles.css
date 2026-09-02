@@ -1844,3 +1844,44 @@ select { font-family: var(--dalo-font); }
     grid-column: 1 / -1;
   }
 }
+
+/* Keep the mobile check-in workspace stable when the on-screen keyboard opens. */
+@media (max-width: 760px) {
+  body:has(.app-shell) {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .app-shell {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .app-shell .checkin-area {
+    min-height: 0;
+    align-self: center;
+    padding: 14px 0;
+    gap: 10px;
+  }
+
+  .app-shell .checkin-panel {
+    gap: 14px;
+    padding: clamp(18px, 5vw, 24px);
+  }
+
+  .app-shell .search-box input {
+    font-size: 16px;
+  }
+
+  .app-shell .footer {
+    padding-bottom: max(2px, env(safe-area-inset-bottom));
+  }
+
+  .app-shell .modal-card {
+    overscroll-behavior: contain;
+  }
+}
