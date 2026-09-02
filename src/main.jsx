@@ -3,16 +3,23 @@ import { createRoot } from "react-dom/client";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import {
   Check,
+  ArrowRight,
+  BarChart3,
+  CalendarCheck2,
   ChevronLeft,
   Download,
   FileUp,
   Link,
   ListChecks,
   Lock,
+  MonitorSmartphone,
+  QrCode,
   RefreshCw,
   ScanLine,
   Search,
   Settings,
+  ShieldCheck,
+  Sparkles,
   Trash2,
   Upload,
   X
@@ -21,7 +28,7 @@ import "./styles.css";
 
 const API_URL =
   "https://script.google.com/macros/s/AKfycbzbldkFxSfXMB9n1cjhShA39_oBMdk7sAOlxhWLUjqpb2mazdRQ7MKo3K-pGMX9PJUZ5w/exec";
-const DEFAULT_THEME_COLOR = "#7dd3fc";
+const DEFAULT_THEME_COLOR = "#1683ff";
 const ADMIN_PASSWORD = "Broadimagi";
 const RESERVED_COLUMNS = ["rowId", "Status", "Time", "UID", "status", "time"];
 const ROUTER_SETTING_KEYS = ["isActive", "syncTime", "Masterlist", "Suggestions", "Confirm", "Notify"];
@@ -94,14 +101,14 @@ const defaultSettings = {
   currentThemeColor: DEFAULT_THEME_COLOR
 };
 
-function App() {
+function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal = false, onExit }) {
   const [masterlist, setMasterlist] = useState(() => getInitial("masterlist", []));
   const [settings, setSettings] = useState(() => {
     const savedSettings = {
       ...defaultSettings,
       ...getInitial("settings", defaultSettings)
     };
-    if (savedSettings.currentThemeColor === "#3b82f6") {
+    if (["#3b82f6", "#7dd3fc"].includes(savedSettings.currentThemeColor)) {
       savedSettings.currentThemeColor = DEFAULT_THEME_COLOR;
     }
     return savedSettings;
@@ -113,8 +120,8 @@ function App() {
   const [currentIndex, setCurrentIndex] = useState(null);
   const [toastItems, setToastItems] = useState([]);
   const [identityUnlocked, setIdentityUnlocked] = useState(false);
-  const [eventId, setEventId] = useState(() => localStorage.getItem("connectedEventId") || "");
-  const [password, setPassword] = useState(() => localStorage.getItem("connectedPassword") || "");
+  const [eventId, setEventId] = useState(() => forceLocal ? "" : initialEventId);
+  const [password, setPassword] = useState(() => forceLocal ? "" : initialPassword);
   const [syncTimeSeconds, setSyncTimeSeconds] = useState(DEFAULT_SYNC_SECONDS);
   const [hasImageBackground, setHasImageBackground] = useState(() => !!localStorage.getItem("customThemePicture"));
   const csvInputRef = useRef(null);
@@ -164,8 +171,24 @@ function App() {
   }, [masterlist, isLiveMode]);
 
   useEffect(() => {
+    if (forceLocal) {
+      localStorage.removeItem("connectedEventId");
+      localStorage.removeItem("connectedPassword");
+      setIsLiveMode(false);
+      return;
+    }
     if (eventId && password) fetchLiveMasterlist(eventId, password, true);
   }, []);
+
+  useEffect(() => {
+    const warnBeforeLeaving = (event) => {
+      if (!isLiveMode) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [isLiveMode]);
 
   useEffect(() => {
     const interval = setInterval(runBackgroundSyncHeartbeat, syncTimeSeconds * 1000);
@@ -215,16 +238,14 @@ function App() {
     const saturation = Math.round(
       delta ? (delta / (1 - Math.abs(2 * lightness - 1))) * 100 : 0
     );
-    const companionLightness = lightBackground
-      ? Math.max(22, Math.round(lightness * 100) - 30)
-      : Math.min(74, Math.round(lightness * 100) + 24);
     document.documentElement.style.setProperty(
       "--bg-gradient",
-      `linear-gradient(135deg, rgb(${r}, ${g}, ${b}) 0%, hsl(${hue}, ${saturation}%, ${companionLightness}%) 100%)`
+      `radial-gradient(circle at 78% 18%, rgba(${r}, ${g}, ${b}, .22), transparent 34rem), linear-gradient(135deg, #ffffff 0%, #f3f5f8 100%)`
     );
+    document.documentElement.style.setProperty("--primary-color", safeHex);
     document.body.style.backgroundImage = "";
-    document.body.classList.toggle("bg-light-contrast", lightBackground);
-    document.body.classList.toggle("bg-dark-contrast", !lightBackground);
+    document.body.classList.add("bg-light-contrast");
+    document.body.classList.remove("bg-dark-contrast");
     if (persist) {
       localStorage.removeItem("customThemePicture");
       setHasImageBackground(false);
@@ -553,12 +574,22 @@ function App() {
 
   function disconnectSheet() {
     if (prompt("Enter admin password to disconnect sheet:") !== ADMIN_PASSWORD) return;
+    clearLiveConnection();
+  }
+
+  function clearLiveConnection() {
     localStorage.removeItem("connectedEventId");
     localStorage.removeItem("connectedPassword");
     setEventId("");
     setPassword("");
     setIsLiveMode(false);
     setMasterlist(getInitial("masterlist", []));
+  }
+
+  function leaveApp() {
+    if (isLiveMode && !confirm("Leave this live event and disconnect this device?")) return;
+    if (isLiveMode) clearLiveConnection();
+    onExit?.();
   }
 
   function unlockOperatorIdentityField() {
@@ -596,13 +627,9 @@ function App() {
   return (
     <main className="app-shell">
       <header className="top-bar">
-        <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true">D</div>
-          <div>
-            <div className="header-title">Dalo</div>
-            <div className="header-kicker">My Presence / Attendance</div>
-          </div>
-        </div>
+        <button className="brand-lockup brand-button" onClick={leaveApp} aria-label="Back to Dalo home">
+          <span className="app-wordmark">Dalo<i aria-hidden="true" /></span>
+        </button>
         <div className="header-controls">
           <div className={`mode-pill ${isLiveMode ? "live" : ""}`}>{isLiveMode ? "Live" : "Local"} Mode | {deviceId}</div>
           <nav className="top-actions" aria-label="Primary actions">
@@ -645,16 +672,13 @@ function App() {
             <button className="primary-button" type="submit">
               <Check size={19} /> Check
             </button>
-            <button
-              className="scan-button"
-              type="button"
-              onClick={() => openModal("scanner", "Scan Guest QR Code")}
-            >
-              <ScanLine size={19} /> Scan QR
-            </button>
           </form>
-          <button className="subtle-button" onClick={() => setQuery("")}>
-            <RefreshCw size={17} /> Refresh
+          <button
+            className="scan-button scan-button-wide"
+            type="button"
+            onClick={() => openModal("scanner", "Scan Guest QR Code")}
+          >
+            <ScanLine size={19} /> Scan QR
           </button>
         </div>
       </section>
@@ -698,6 +722,7 @@ function App() {
               eventId={eventId}
               password={password}
               isLiveMode={isLiveMode}
+              showEventConnection={!forceLocal}
               deviceId={deviceId}
               identityUnlocked={identityUnlocked}
               hasImageBackground={hasImageBackground}
@@ -899,6 +924,7 @@ function SettingsModal(props) {
     eventId,
     password,
     isLiveMode,
+    showEventConnection,
     deviceId,
     identityUnlocked,
     hasImageBackground,
@@ -935,12 +961,14 @@ function SettingsModal(props) {
         </label>
       </div>
 
-      <div className="settings-grid event-grid">
-        <input value={eventId} onChange={(event) => onEventId(event.target.value)} placeholder="Event ID" />
-        <input value={password} onChange={(event) => onPassword(event.target.value)} type="password" placeholder="Password" />
-        <button className="primary-button" onClick={onConnect}><Link size={18} /> Link Event</button>
-        {eventId && <button className="danger-button" onClick={onDisconnect}>Disconnect</button>}
-      </div>
+      {showEventConnection && (
+        <div className="settings-grid event-grid">
+          <input value={eventId} onChange={(event) => onEventId(event.target.value)} placeholder="Event ID" />
+          <input value={password} onChange={(event) => onPassword(event.target.value)} type="password" placeholder="Password" />
+          <button className="primary-button" onClick={onConnect}><Link size={18} /> Link Event</button>
+          {eventId && <button className="danger-button" onClick={onDisconnect}>Disconnect</button>}
+        </div>
+      )}
 
       {!isLiveMode && (
         <button className="upload-button" onClick={onUpload}>
@@ -1034,4 +1062,181 @@ function ToastStack({ items }) {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+const navigate = (path, state = {}) => {
+  window.history.pushState(state, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+function PublicHeader() {
+  return (
+    <header className="site-header">
+      <button className="site-brand" onClick={() => navigate("/")} aria-label="Dalo home">
+        <span>D</span><strong>Dalo</strong>
+      </button>
+      <nav aria-label="Main navigation">
+        <button onClick={() => navigate("/features")}>Features</button>
+        <button onClick={() => { navigate("/"); setTimeout(() => document.getElementById("how-it-works")?.scrollIntoView(), 0); }}>How it works</button>
+        <button onClick={() => navigate("/pricing")}>Pricing</button>
+        <button className="nav-app" onClick={() => navigate("/app/local")}>Open app</button>
+      </nav>
+    </header>
+  );
+}
+
+function HomePage() {
+  const [eventId, setEventId] = useState("");
+  const startOnline = (event) => {
+    event.preventDefault();
+    if (eventId.trim()) navigate(`/app/auth?event=${encodeURIComponent(eventId.trim())}`);
+  };
+  return (
+    <main className="marketing-page">
+      <PublicHeader />
+      <section className="hero-section">
+        <form className="hero-event-form" onSubmit={startOnline}>
+          <label htmlFor="event-id">Enter Event ID</label>
+          <input id="event-id" value={eventId} onChange={(e) => setEventId(e.target.value)} placeholder="EVENT ID" autoComplete="off" aria-label="Event ID" />
+          <button disabled={!eventId.trim()} aria-label="Continue"><ArrowRight size={20} /></button>
+        </form>
+        <div className="hero-grid">
+          <div className="hero-copy">
+            <p className="site-eyebrow">Enterprise attendance</p>
+            <h1>Dalo — My Attendance / My Presence</h1>
+            <p className="hero-lede">Eliminate paper sign-in sheets and manual data entry. Dalo provides fast, secure digital attendance tracking for enterprise events, conferences, and organizational meetings.</p>
+            <div className="hero-actions">
+              <a className="site-primary" href="mailto:hello@broadimagi.com?subject=Dalo%20demo">Request demo</a>
+              <button className="site-secondary" onClick={() => navigate("/app/local")}>Use it for free</button>
+            </div>
+          </div>
+          <figure className="digital-visual"><img src="/dalo-digital-attendance.png" alt="Laptop and mobile devices displaying synchronized digital attendance information" /></figure>
+        </div>
+      </section>
+      <section className="home-solution" id="how-it-works">
+        <p className="site-eyebrow">How it works</p>
+        <h2>One system. Two modes.</h2>
+        <div className="solution-grid">
+          <article><MonitorSmartphone /><small>Local mode</small><h3>Simple and self-contained.</h3><p>Import a CSV and run attendance from a single device—even without an internet connection.</p><button onClick={() => navigate("/app/local")}>Start locally <ArrowRight size={16} /></button></article>
+          <article><Sparkles /><small>Online mode</small><h3>Everyone stays in sync.</h3><p>Connect multiple check-in devices to one live guest list, with instant attendance updates.</p><button onClick={() => document.getElementById("event-id")?.focus()}>Join an event <ArrowRight size={16} /></button></article>
+        </div>
+      </section>
+      <SiteFooter />
+    </main>
+  );
+}
+
+function AuthPage() {
+  const eventId = new URLSearchParams(window.location.search).get("event") || "";
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState({ loading: false, error: "" });
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!eventId || !password) return;
+    setStatus({ loading: true, error: "" });
+    try {
+      const response = await fetch(`${API_URL}?eventId=${encodeURIComponent(eventId)}&password=${encodeURIComponent(password)}`);
+      const payload = normalizeLivePayload(await response.json());
+      if (payload.error || !isRouterActive(payload.router)) {
+        setStatus({ loading: false, error: payload.error || "This event is currently inactive." });
+        return;
+      }
+      localStorage.setItem("connectedEventId", eventId);
+      localStorage.setItem("connectedPassword", password);
+      navigate(`/app/${encodeURIComponent(eventId)}`, { eventPassword: password });
+    } catch {
+      setStatus({ loading: false, error: "We couldn't reach this event. Check your connection and try again." });
+    }
+  };
+  return (
+    <main className="auth-page">
+      <PublicHeader />
+      <section className="auth-shell">
+        <button className="back-link" onClick={() => navigate("/")}><ChevronLeft size={17} /> Back to home</button>
+        <div className="auth-card">
+          <div className="access-icon"><Lock size={23} /></div>
+          <p className="card-kicker">Secure event access</p>
+          <h1>One last step.</h1>
+          <p>Enter the password for <strong>{eventId || "this event"}</strong> to open its live attendance workspace.</p>
+          <form onSubmit={submit}>
+            <label htmlFor="event-password">Event password</label>
+            <input id="event-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter event password" autoFocus />
+            {status.error && <p className="auth-error" role="alert">{status.error}</p>}
+            <button className="site-primary" disabled={!eventId || !password || status.loading}>{status.loading ? "Verifying…" : "Verify and enter"} {!status.loading && <ArrowRight size={18} />}</button>
+          </form>
+          <span className="secure-note"><ShieldCheck size={16} /> Your credentials are used only to connect to this event.</span>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+const featureCards = [
+  [QrCode, "Fast guest check-in", "Find guests by name or scan their QR code, then confirm attendance in seconds."],
+  [MonitorSmartphone, "Local-first reliability", "Upload a CSV and keep check-in moving from one device, even when the venue connection is unreliable."],
+  [RefreshCw, "Live multi-device sync", "Give every entrance the same up-to-date guest list and prevent accidental duplicate check-ins."],
+  [BarChart3, "Attendance at a glance", "See totals, checked-in guests, pending arrivals, and attendance rate as the event unfolds."],
+  [Settings, "Flexible guest fields", "Choose which columns appear in search, confirmation, notifications, and your masterlist."],
+  [Sparkles, "An event that feels yours", "Personalize colors and background imagery to match your organization, venue, or event identity."]
+];
+
+function FeaturesPage() {
+  return <main className="marketing-page"><PublicHeader /><section className="page-intro"><p className="site-eyebrow"><span /> Designed for the door</p><h1>Less queue. More welcome.</h1><p>Dalo keeps the mechanics of attendance out of the way, so your team can focus on the people arriving.</p></section><section className="feature-grid">{featureCards.map(([Icon, title, copy]) => <article key={title}><div><Icon size={23} /></div><h2>{title}</h2><p>{copy}</p></article>)}</section><section className="page-cta"><div><p className="card-kicker">Ready when your doors open</p><h2>Start with the setup that fits your event.</h2></div><button className="site-primary" onClick={() => navigate("/app/local")}>Open local app <ArrowRight size={18} /></button></section><SiteFooter /></main>;
+}
+
+const plans = [
+  ["Essential", "₱999", "per event", "Up to 100 participants", ["Personalized event workspace", "Live multi-device attendance", "QR and name check-in", "Attendance export"]],
+  ["Team", "₱1,449", "per event", "Up to 150 participants", ["Everything in Essential", "More room for growing events", "Live attendance overview", "Custom guest fields"]],
+  ["Unlimited", "₱1,999", "per event", "Unlimited participants", ["Everything in Team", "No participant cap", "Best for conferences and large events", "Priority event setup"]]
+];
+
+function PricingPage() {
+  return <main className="marketing-page"><PublicHeader /><section className="page-intro pricing-intro"><p className="site-eyebrow"><span /> Straightforward event pricing</p><h1>Personalize one event.<br />Pay for only that event.</h1><p>For organizations that want a branded, connected attendance experience without a long-term subscription.</p></section><section className="pricing-grid">{plans.map(([name, price, cadence, capacity, items], index) => <article className={index === 1 ? "featured-plan" : ""} key={name}>{index === 1 && <span className="popular">Most popular</span>}<p className="card-kicker">{name}</p><h2>{price}</h2><span className="cadence">{cadence}</span><strong>{capacity}</strong><ul>{items.map(item => <li key={item}><Check size={16} />{item}</li>)}</ul><a href="mailto:hello@broadimagi.com?subject=Dalo%20event%20pricing">Personalize my event <ArrowRight size={17} /></a></article>)}</section><p className="pricing-note">Need help choosing? Tell us about your event and we’ll recommend the right fit.</p><SiteFooter /></main>;
+}
+
+function SiteFooter() {
+  return <footer className="site-footer"><div className="site-brand"><span>D</span><strong>Dalo</strong></div><p>Attendance that feels effortless.</p><div><button onClick={() => navigate("/features")}>Features</button><button onClick={() => navigate("/pricing")}>Pricing</button><a href="https://broadimagi.com" target="_blank" rel="noreferrer">Broadimagi</a></div></footer>;
+}
+
+function DaloSite() {
+  const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
+  useEffect(() => {
+    const currentPath = location.split("?")[0];
+    const update = () => {
+      const nextLocation = window.location.pathname + window.location.search;
+      const nextPath = window.location.pathname;
+      const leavingLiveEvent =
+        currentPath.startsWith("/app/") &&
+        currentPath !== "/app/local" &&
+        nextPath !== currentPath &&
+        !!localStorage.getItem("connectedEventId");
+      if (leavingLiveEvent && !confirm("Leave this live event and disconnect this device?")) {
+        window.history.forward();
+        return;
+      }
+      if (leavingLiveEvent) {
+        localStorage.removeItem("connectedEventId");
+        localStorage.removeItem("connectedPassword");
+      }
+      setLocation(nextLocation);
+    };
+    window.addEventListener("popstate", update);
+    return () => window.removeEventListener("popstate", update);
+  }, [location]);
+  const path = location.split("?")[0].replace(/\/docs\/?$/, "/");
+  if (path === "/features") return <FeaturesPage />;
+  if (path === "/pricing") return <PricingPage />;
+  if (path === "/app/auth") return <AuthPage />;
+  if (path === "/app/local") return <AttendanceApp forceLocal onExit={() => navigate("/")} />;
+  if (path.startsWith("/app/")) {
+    const id = decodeURIComponent(path.slice(5));
+    const queryPassword = new URLSearchParams(window.location.search).get("password") || "";
+    const savedEventId = localStorage.getItem("connectedEventId") || "";
+    const savedPassword = savedEventId === id ? localStorage.getItem("connectedPassword") || "" : "";
+    const pass = window.history.state?.eventPassword || queryPassword || savedPassword;
+    if (queryPassword) window.history.replaceState({ eventPassword: queryPassword }, "", `/app/${encodeURIComponent(id)}`);
+    return <AttendanceApp initialEventId={id} initialPassword={pass} onExit={() => navigate("/")} />;
+  }
+  return <HomePage />;
+}
+
+createRoot(document.getElementById("root")).render(<DaloSite />);
