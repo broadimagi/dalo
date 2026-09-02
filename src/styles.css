@@ -931,26 +931,29 @@ tr:last-child td {
   position: fixed;
   right: 24px;
   bottom: 44px;
-  z-index: 30;
+  /* Notifications stay below operational dialogs and cannot cover their controls. */
+  z-index: 10;
   display: grid;
   gap: 8px;
-  max-width: min(380px, calc(100vw - 32px));
+  max-width: min(300px, calc(100vw - 28px));
 }
 
 .toast {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 7px;
   color: #0f172a;
+  font-size: 12px;
+  line-height: 1.35;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 18px 40px rgba(2, 6, 23, 0.25);
 }
 
 .toast span {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: #10b981;
@@ -1045,7 +1048,10 @@ tr:last-child td {
     font-size: 19px;
   }
 
-  .suggestion-grid,
+  .suggestion-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(155px, 100%), 1fr));
+  }
+
   .guest-fields {
     grid-template-columns: 1fr;
   }
@@ -1089,9 +1095,11 @@ tr:last-child td {
   }
 
   .toast-stack {
-    left: 14px;
-    right: 14px;
-    bottom: 18px;
+    left: 50%;
+    right: auto;
+    bottom: 14px;
+    width: max-content;
+    transform: translateX(-50%);
   }
 }
 
@@ -1635,6 +1643,20 @@ select { font-family: var(--dalo-font); }
 }
 .suggestion-card:hover { border-color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 4%, #fff); }
 .suggestion-card em { color: #111318; font-size: 11px; font-weight: 800; letter-spacing: .03em; }
+.suggestion-card.is-checked {
+  border-color: #e5e7eb;
+  background: #f4f5f6;
+  opacity: .62;
+}
+.suggestion-card.is-checked:hover {
+  border-color: #d8dce1;
+  background: #f1f2f3;
+}
+.suggestion-card.is-checked .suggestion-grid span,
+.suggestion-card.is-checked .suggestion-grid strong,
+.suggestion-card.is-checked em {
+  color: #667085;
+}
 .guest-fields { border-color: #dfe3e8; border-radius: 7px; background: #f8fafc; }
 
 .modal-card th { padding-block: 13px; background: #f6f8fa; }
@@ -1659,6 +1681,64 @@ select { font-family: var(--dalo-font); }
 .settings-table th,
 .table-wrapper th { border-top-color: var(--primary-color); }
 .app-shell .icon-button:hover { color: var(--primary-color); border-color: var(--primary-color); }
+
+@media (max-width: 560px) {
+  .app-shell .header-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) repeat(2, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .app-shell .top-actions {
+    display: contents;
+  }
+
+  .app-shell .mode-pill,
+  .app-shell .top-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0 5px;
+  }
+
+  .app-shell .mode-pill {
+    justify-content: center;
+    font-size: clamp(7.5px, 2.15vw, 10px);
+    letter-spacing: .015em;
+  }
+
+  .app-shell .top-actions button {
+    gap: 4px;
+    font-size: clamp(9px, 2.5vw, 12px);
+  }
+
+  .app-shell .top-actions button svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+  }
+
+  .front-dashboard {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .front-dashboard .front-stat {
+    min-width: 0;
+    min-height: 64px;
+    padding: 7px 2px;
+  }
+
+  .front-dashboard .front-stat span {
+    font-size: clamp(6.5px, 2vw, 9px);
+    letter-spacing: .02em;
+    white-space: nowrap;
+  }
+
+  .front-dashboard .front-stat strong {
+    font-size: clamp(17px, 5.5vw, 22px);
+  }
+}
 .toast { border: 1px solid #e2e5e9; border-radius: 7px; font-size: 13px; font-weight: 600; }
 .toast strong { font-weight: 800; }
 

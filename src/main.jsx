@@ -637,10 +637,8 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
           </div>
         )}
         <div className="checkin-panel">
-          <div className="brand-mark hero-mark" aria-hidden="true">D</div>
           <div>
-            <p className="eyebrow">Dalo</p>
-            <h1 id="checkin-title">My Presence /  Attendance</h1>
+            <h1 id="checkin-title">My Attendance / My Presence</h1>
           </div>
           <form onSubmit={checkName} className="search-form">
             <div className="search-box">
@@ -674,7 +672,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
       <input ref={csvInputRef} type="file" hidden accept=".csv" onChange={loadCsv} />
       <input ref={bgInputRef} type="file" hidden accept="image/*" onChange={handleBackgroundUpload} />
 
-      <ToastStack items={toastItems} />
+      {!modal && <ToastStack items={toastItems} />}
       {modal && (
         <Modal title={modal.title} onClose={closeModal}>
           {modal.type === "message" && <MessageModal message={modal.message} />}
@@ -835,8 +833,14 @@ function QrScanner({ onScan }) {
 function SuggestionsModal({ matches, columns, onSelect, isChecked }) {
   return (
     <div className="suggestion-list">
-      {matches.map(({ row, index }) => (
-        <button key={index} className="suggestion-card" onClick={() => onSelect(index)}>
+      {matches.map(({ row, index }) => {
+        const checked = isChecked(row);
+        return (
+        <button
+          key={index}
+          className={`suggestion-card${checked ? " is-checked" : ""}`}
+          onClick={() => onSelect(index)}
+        >
           <div className="suggestion-grid" style={{ "--columns": columns.length || 1 }}>
             {columns.map((column) => (
               <div key={column}>
@@ -845,9 +849,10 @@ function SuggestionsModal({ matches, columns, onSelect, isChecked }) {
               </div>
             ))}
           </div>
-          <em>{isChecked(row) ? "Already Checked-In" : "Tap to Verify & Check-In"}</em>
+          <em>{checked ? "Already Checked-In" : "Tap to Verify & Check-In"}</em>
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1052,6 +1057,15 @@ const navigate = (path, state = {}) => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
+const eventBriefBody = encodeURIComponent(
+  "Hello Dalo team,\n\nI would like to personalize an event.\n\n1. Event Name:\n2. Excel Sheet URL:\n3. Theme Color:\n4. Logo: (Please attach the logo to this email)\n\nThank you."
+);
+const demoRequestBody = encodeURIComponent(
+  "Hello Dalo team,\n\nI would like to request a Dalo demo.\n\n1. Name:\n2. Company / Organization:\n3. Contact Number:\n4. Event Type:\n5. Estimated Participants:\n6. Preferred Demo Date and Time:\n\nThank you."
+);
+const demoEmailHref = `mailto:info@broadimagi.com?subject=${encodeURIComponent("Dalo Demo Request")}&body=${demoRequestBody}`;
+const eventEmailHref = `mailto:info@broadimagi.com?subject=${encodeURIComponent("Dalo Personalized Event Request")}&body=${eventBriefBody}`;
+
 function PublicHeader() {
   return (
     <header className="site-header">
@@ -1086,10 +1100,10 @@ function HomePage() {
         <div className="hero-grid">
           <div className="hero-copy">
             <p className="site-eyebrow">Enterprise attendance</p>
-            <h1>Dalo — My Attendance / My Presence</h1>
+            <h1>Dalo - My Attendance / My Presence</h1>
             <p className="hero-lede">Eliminate paper sign-in sheets and manual data entry. Dalo provides fast, secure digital attendance tracking for enterprise events, conferences, and organizational meetings.</p>
             <div className="hero-actions">
-              <a className="site-primary" href="mailto:hello@broadimagi.com?subject=Dalo%20demo">Request demo</a>
+              <a className="site-primary" href={demoEmailHref}>Request demo</a>
               <button className="site-secondary" onClick={() => navigate("/app/local")}>Use it for free</button>
             </div>
           </div>
@@ -1174,7 +1188,7 @@ const plans = [
 ];
 
 function PricingPage() {
-  return <main className="marketing-page"><PublicHeader /><section className="page-intro pricing-intro"><p className="site-eyebrow"><span /> Straightforward event pricing</p><h1>Personalize one event.<br />Pay for only that event.</h1><p>For organizations that want a branded, connected attendance experience without a long-term subscription.</p></section><section className="pricing-grid">{plans.map(([name, price, cadence, capacity, items], index) => <article className={index === 1 ? "featured-plan" : ""} key={name}>{index === 1 && <span className="popular">Most popular</span>}<p className="card-kicker">{name}</p><h2>{price}</h2><span className="cadence">{cadence}</span><strong>{capacity}</strong><ul>{items.map(item => <li key={item}><Check size={16} />{item}</li>)}</ul><a href="mailto:hello@broadimagi.com?subject=Dalo%20event%20pricing">Personalize my event <ArrowRight size={17} /></a></article>)}</section><p className="pricing-note">Need help choosing? Tell us about your event and we’ll recommend the right fit.</p><SiteFooter /></main>;
+  return <main className="marketing-page"><PublicHeader /><section className="page-intro pricing-intro"><p className="site-eyebrow"><span /> Straightforward event pricing</p><h1>Personalize one event.<br />Pay for only that event.</h1><p>For organizations that want a branded, connected attendance experience without a long-term subscription.</p></section><section className="pricing-grid">{plans.map(([name, price, cadence, capacity, items], index) => <article className={index === 1 ? "featured-plan" : ""} key={name}>{index === 1 && <span className="popular">Most popular</span>}<p className="card-kicker">{name}</p><h2>{price}</h2><span className="cadence">{cadence}</span><strong>{capacity}</strong><ul>{items.map(item => <li key={item}><Check size={16} />{item}</li>)}</ul><a href={eventEmailHref}>Personalize my event <ArrowRight size={17} /></a></article>)}</section><p className="pricing-note">Need help choosing? Tell us about your event and we’ll recommend the right fit.</p><SiteFooter /></main>;
 }
 
 function SiteFooter() {
@@ -1191,6 +1205,7 @@ function DaloSite() {
       const leavingLiveEvent =
         currentPath.startsWith("/app/") &&
         currentPath !== "/app/local" &&
+        currentPath !== "/app/auth" &&
         nextPath !== currentPath &&
         !!localStorage.getItem("connectedEventId");
       if (leavingLiveEvent && !confirm("Leave this live event and disconnect this device?")) {
