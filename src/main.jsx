@@ -890,6 +890,30 @@ function SuggestionsModal({ matches, columns, onSelect, isChecked }) {
 }
 
 function ConfirmationModal({ row, columns, checked, onBack, onConfirm }) {
+  const confirmButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!checked) confirmButtonRef.current?.focus();
+
+    const handleKeyboard = (event) => {
+      const target = event.target;
+      const isTyping = target instanceof HTMLElement && (
+        target.matches("input, textarea, select") || target.isContentEditable
+      );
+
+      if (event.key === "Backspace" && !isTyping) {
+        event.preventDefault();
+        onBack();
+      } else if (event.key === "Enter" && !checked && !isTyping && !event.repeat) {
+        event.preventDefault();
+        onConfirm();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyboard);
+    return () => window.removeEventListener("keydown", handleKeyboard);
+  }, [checked, onBack, onConfirm]);
+
   return (
     <div className="confirm-layout">
       <GuestFields row={row} columns={columns} />
@@ -899,7 +923,7 @@ function ConfirmationModal({ row, columns, checked, onBack, onConfirm }) {
           <span>{row.Time || row.time || "No timestamp."}</span>
         </div>
       ) : (
-        <button className="primary-button confirm-button" onClick={onConfirm}>
+        <button ref={confirmButtonRef} className="primary-button confirm-button" onClick={onConfirm}>
           <Check size={20} /> Confirm Check-In
         </button>
       )}
