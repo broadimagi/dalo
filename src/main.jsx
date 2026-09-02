@@ -749,6 +749,14 @@ function Stat({ title, value, tone = "" }) {
 }
 
 function Modal({ title, children, onClose }) {
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
   return (
     <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="modal-card" role="dialog" aria-modal="true" aria-label={title}>
@@ -831,14 +839,38 @@ function QrScanner({ onScan }) {
 }
 
 function SuggestionsModal({ matches, columns, onSelect, isChecked }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const cardRefs = useRef([]);
+
+  useEffect(() => {
+    cardRefs.current[0]?.focus();
+  }, []);
+
+  function handleKeyDown(event) {
+    if (!["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) return;
+    event.preventDefault();
+
+    if (event.key === "Enter") {
+      onSelect(matches[activeIndex].index);
+      return;
+    }
+
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    const nextIndex = (activeIndex + direction + matches.length) % matches.length;
+    setActiveIndex(nextIndex);
+    cardRefs.current[nextIndex]?.focus();
+  }
+
   return (
-    <div className="suggestion-list">
-      {matches.map(({ row, index }) => {
+    <div className="suggestion-list" onKeyDown={handleKeyDown}>
+      {matches.map(({ row, index }, listIndex) => {
         const checked = isChecked(row);
         return (
         <button
           key={index}
+          ref={(element) => { cardRefs.current[listIndex] = element; }}
           className={`suggestion-card${checked ? " is-checked" : ""}`}
+          onFocus={() => setActiveIndex(listIndex)}
           onClick={() => onSelect(index)}
         >
           <div className="suggestion-grid" style={{ "--columns": columns.length || 1 }}>
@@ -933,14 +965,14 @@ function SettingsModal(props) {
   return (
     <div className="settings-layout">
       <div className="settings-grid">
-        <label>
+        <label className="tracking-setting">
           <span>Tracking UID</span>
           <div className="inline-control">
             <input value={deviceId} disabled={!identityUnlocked} onChange={(event) => onDeviceChange(event.target.value)} />
             {!identityUnlocked && <button onClick={onUnlock}><Lock size={16} /> Unlock</button>}
           </div>
         </label>
-        <label>
+        <label className="brand-setting">
           <span>Brand Color</span>
           <div className="inline-control">
             <input className="color-input" type="color" value={settings.currentThemeColor} onChange={(event) => onColorChange(event.target.value)} />
@@ -960,7 +992,7 @@ function SettingsModal(props) {
       )}
 
       {!isLiveMode && (
-        <button className="upload-button" onClick={onUpload}>
+        <button className="upload-button settings-upload" onClick={onUpload}>
           <FileUp size={18} /> Upload Local CSV
         </button>
       )}

@@ -1642,6 +1642,11 @@ select { font-family: var(--dalo-font); }
   background: #fff;
 }
 .suggestion-card:hover { border-color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 4%, #fff); }
+.suggestion-card:focus-visible {
+  border-color: var(--primary-color);
+  outline: 3px solid color-mix(in srgb, var(--primary-color) 18%, transparent);
+  background: color-mix(in srgb, var(--primary-color) 4%, #fff);
+}
 .suggestion-card em { color: #111318; font-size: 11px; font-weight: 800; letter-spacing: .03em; }
 .suggestion-card.is-checked {
   border-color: #e5e7eb;
@@ -1794,4 +1799,48 @@ select { font-family: var(--dalo-font); }
 }
 .bg-light-contrast .app-shell .mode-pill:not(.live)::before {
   background: #111318;
+}
+
+/* Balanced configuration controls. */
+.settings-layout .settings-grid {
+  align-items: end;
+  gap: 18px;
+}
+.settings-layout .settings-grid label,
+.settings-layout .inline-control {
+  min-width: 0;
+  width: 100%;
+}
+.settings-layout .inline-control {
+  min-height: 44px;
+}
+.settings-layout .inline-control button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+.settings-layout .brand-setting .inline-control button:not(.danger-lite) {
+  flex: 1;
+}
+.settings-layout .brand-setting .color-input {
+  width: 68px;
+  flex: 0 0 68px;
+}
+.settings-layout .settings-upload {
+  width: 100%;
+  min-height: 46px;
+}
+
+@media (max-width: 760px) {
+  .settings-layout .brand-setting .inline-control {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .settings-layout .brand-setting .color-input {
+    width: 64px;
+  }
+
+  .settings-layout .brand-setting .danger-lite {
+    grid-column: 1 / -1;
+  }
 }
