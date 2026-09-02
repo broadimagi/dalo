@@ -5,7 +5,6 @@ import {
   Check,
   ArrowRight,
   BarChart3,
-  CalendarCheck2,
   ChevronLeft,
   Download,
   FileUp,
@@ -223,21 +222,6 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     const r = parseInt(safeHex.slice(1, 3), 16);
     const g = parseInt(safeHex.slice(3, 5), 16);
     const b = parseInt(safeHex.slice(5, 7), 16);
-    const lightBackground = 0.299 * r + 0.587 * g + 0.114 * b > 155;
-    const max = Math.max(r, g, b) / 255;
-    const min = Math.min(r, g, b) / 255;
-    const delta = max - min;
-    let hue = 0;
-    if (delta) {
-      if (max === r / 255) hue = 60 * (((g - b) / 255 / delta) % 6);
-      else if (max === g / 255) hue = 60 * ((b - r) / 255 / delta + 2);
-      else hue = 60 * ((r - g) / 255 / delta + 4);
-    }
-    hue = (hue + 360) % 360;
-    const lightness = (max + min) / 2;
-    const saturation = Math.round(
-      delta ? (delta / (1 - Math.abs(2 * lightness - 1))) * 100 : 0
-    );
     document.documentElement.style.setProperty(
       "--bg-gradient",
       `radial-gradient(circle at 78% 18%, rgba(${r}, ${g}, ${b}, .22), transparent 34rem), linear-gradient(135deg, #ffffff 0%, #f3f5f8 100%)`
