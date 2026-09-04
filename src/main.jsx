@@ -30,8 +30,9 @@ const API_URL =
 const DEFAULT_THEME_COLOR = "#1683ff";
 const ADMIN_PASSWORD = "Broadimagi";
 const RESERVED_COLUMNS = ["rowId", "Status", "Time", "UID", "status", "time"];
-const ROUTER_SETTING_KEYS = ["isActive", "syncTime", "Masterlist", "Suggestions", "Confirm", "Notify", "eventName", "eventTheme", "qrKey"];
-const DEFAULT_SYNC_SECONDS = 60;
+const ROUTER_SETTING_KEYS = ["isActive", "syncTime", "notificationTime", "Masterlist", "Suggestions", "Confirm", "Notify", "eventName", "eventTheme", "qrKey"];
+const DEFAULT_SYNC_SECONDS = 600;
+const DEFAULT_NOTIFICATION_SECONDS = 15;
 const MIN_SYNC_SECONDS = 15;
 const MAX_SYNC_SECONDS = 3600;
 
@@ -55,6 +56,7 @@ const normalizeLivePayload = (payload) => {
     rows: Array.isArray(rows) ? rows : [],
     headers: Array.isArray(payload.headers) ? payload.headers : null,
     router,
+    updateCursor: Number(payload.updateCursor) || 0,
     error: payload.error || null
   };
 };
@@ -70,6 +72,12 @@ const getRouterSyncSeconds = (router) => {
   const value = Number(getCaseInsensitiveValue(router, "syncTime"));
   if (!Number.isFinite(value) || value <= 0) return DEFAULT_SYNC_SECONDS;
   return Math.min(MAX_SYNC_SECONDS, Math.max(MIN_SYNC_SECONDS, Math.round(value)));
+};
+
+const getRouterNotificationSeconds = (router) => {
+  const value = Number(getCaseInsensitiveValue(router, "notificationTime"));
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_NOTIFICATION_SECONDS;
+  return Math.min(MAX_SYNC_SECONDS, Math.max(5, Math.round(value)));
 };
 
 const getRouterThemeColor = (router) => {
@@ -136,10 +144,12 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
   const [eventName, setEventName] = useState("");
   const [qrColumn, setQrColumn] = useState("");
   const [syncTimeSeconds, setSyncTimeSeconds] = useState(DEFAULT_SYNC_SECONDS);
+  const [notificationTimeSeconds, setNotificationTimeSeconds] = useState(DEFAULT_NOTIFICATION_SECONDS);
   const [hasImageBackground, setHasImageBackground] = useState(() => !!localStorage.getItem("customThemePicture"));
   const csvInputRef = useRef(null);
   const bgInputRef = useRef(null);
   const searchInputRef = useRef(null);
+  const updateCursorRef = useRef(0);
 
   const headers = useMemo(
     () => Object.keys(masterlist[0] || {}).filter((key) => !RESERVED_COLUMNS.includes(key)),
@@ -208,13 +218,20 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     return () => clearInterval(interval);
   }, [isLiveMode, modal, eventId, password, masterlist, settings, syncTimeSeconds]);
 
+  useEffect(() => {
+    const interval = setInterval(runNotificationHeartbeat, notificationTimeSeconds * 1000);
+    return () => clearInterval(interval);
+  }, [isLiveMode, eventId, password, masterlist, settings, notificationTimeSeconds]);
+
   const dataColumns = (preferred) => {
     if (Array.isArray(preferred)) return preferred;
     return headers;
   };
 
   function isChecked(row) {
-    return ["Checked", "Checked-in"].includes(row?.Status || row?.status);
+    return ["checked", "checked-in", "checked in"].includes(
+      String(row?.Status || row?.status || "").trim().toLowerCase()
+    );
   }
 
   function openModal(type, title, content = {}) {
@@ -442,6 +459,8 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
         return;
       }
       setSyncTimeSeconds(getRouterSyncSeconds(payload.router));
+      setNotificationTimeSeconds(getRouterNotificationSeconds(payload.router));
+      updateCursorRef.current = Number(payload.updateCursor) || 0;
       setEventName(String(getCaseInsensitiveValue(payload.router, "eventName") || "").trim());
       const indexedColumns = Array.isArray(payload.headers) && payload.headers.length
         ? payload.headers
@@ -491,6 +510,8 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
         return;
       }
       setSyncTimeSeconds(getRouterSyncSeconds(payload.router));
+      setNotificationTimeSeconds(getRouterNotificationSeconds(payload.router));
+      updateCursorRef.current = Math.max(updateCursorRef.current, Number(payload.updateCursor) || 0);
       setEventName(String(getCaseInsensitiveValue(payload.router, "eventName") || "").trim());
       const heartbeatColumns = Array.isArray(payload.headers) && payload.headers.length
         ? payload.headers
@@ -510,34 +531,64 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     }
   }
 
+  async function runNotificationHeartbeat() {
+    if (!isLiveMode || !eventId || !password) return;
+    try {
+      const response = await fetch(
+        `${API_URL}?action=updates&eventId=${encodeURIComponent(eventId)}&password=${encodeURIComponent(password)}&after=${updateCursorRef.current}`
+      );
+      const payload = await response.json();
+      if (payload.error || !Array.isArray(payload.updates)) return;
+
+      const updatesByRow = new Map(
+        payload.updates.map((update) => [String(update.rowId), update])
+      );
+      const newlyChecked = [];
+      const nextRows = masterlist.map((row) => {
+        const update = updatesByRow.get(String(row.rowId));
+        if (!update) return row;
+        if (!isChecked(row)) newlyChecked.push({ ...row, ...update, Status: "Checked-in" });
+        return { ...row, Status: "Checked-in", Time: update.time, UID: update.operator };
+      });
+
+      if (updatesByRow.size) setMasterlist(nextRows);
+      newlyChecked.forEach(notifyCheckIn);
+      updateCursorRef.current = Math.max(
+        updateCursorRef.current,
+        Number(payload.updateCursor) || 0
+      );
+    } catch {
+      // Lightweight updates retry on the next interval.
+    }
+  }
+
   async function checkIn() {
     if (currentIndex === null) return;
     const targetGuest = masterlist[currentIndex];
-    const time = new Date().toLocaleString();
+    let time = new Date().toLocaleString();
     if (isLiveMode) {
       openModal("message", "Verifying", { message: "Checking database state..." });
       try {
-        const verifyResponse = await fetch(`${API_URL}?eventId=${encodeURIComponent(eventId)}&password=${encodeURIComponent(password)}`);
-        const verifyPayload = normalizeLivePayload(await verifyResponse.json());
-        if (verifyPayload.error || !isRouterActive(verifyPayload.router)) {
-          openModal("message", "Check-In Blocked", { message: verifyPayload.error || "This event is currently inactive." });
-          return;
-        }
-        const freshestData = verifyPayload.rows;
-        const freshRow = freshestData.find((row) => String(row.rowId) === String(targetGuest.rowId));
-        if (freshRow && isChecked(freshRow)) {
-          openModal("message", "Overwrite Blocked", { message: "Another operator already checked this guest in." });
-          return;
-        }
         const response = await fetch(API_URL, {
           method: "POST",
-          body: JSON.stringify({ eventId, password, rowId: targetGuest.rowId, status: "Checked-in", time, operator: deviceId })
+          body: JSON.stringify({
+            eventId,
+            password,
+            rowId: targetGuest.rowId,
+            operator: deviceId,
+            requestId: crypto.randomUUID?.() || String(Date.now())
+          })
         });
         const result = await response.json();
         if (!result.success) {
           openModal("message", "Sync Refused", { message: `Error: ${result.error}` });
           return;
         }
+        time = result.time || time;
+        updateCursorRef.current = Math.max(
+          updateCursorRef.current,
+          Number(result.updateCursor) || 0
+        );
       } catch {
         openModal("message", "Network Error", { message: "Sync failed." });
         return;
@@ -607,6 +658,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     setPassword("");
     setEventName("");
     setQrColumn("");
+    updateCursorRef.current = 0;
     setIsLiveMode(false);
     setMasterlist(getInitial("masterlist", []));
     applyColorEngine(settings.currentThemeColor || DEFAULT_THEME_COLOR, false);
