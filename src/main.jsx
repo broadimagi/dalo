@@ -607,7 +607,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     const label = columns.map((column) => row[column]).filter(Boolean).join(" - ") || row.Name || "Guest Profile";
     const id = crypto.randomUUID?.() || String(Date.now());
     setToastItems((items) => [...items.slice(-4), { id, label }]);
-    setTimeout(() => setToastItems((items) => items.filter((item) => item.id !== id)), 45000);
+    setTimeout(() => setToastItems((items) => items.filter((item) => item.id !== id)), 8000);
   }
 
   function afterCheckIn() {
@@ -796,6 +796,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
               headers={headers}
               settings={settings}
               eventId={eventId}
+              eventName={eventName}
               password={password}
               isLiveMode={isLiveMode}
               showEventConnection={!forceLocal}
@@ -1061,6 +1062,7 @@ function SettingsModal(props) {
     headers,
     settings,
     eventId,
+    eventName,
     password,
     isLiveMode,
     showEventConnection,
@@ -1101,12 +1103,18 @@ function SettingsModal(props) {
       </div>
 
       {showEventConnection && (
-        <div className="settings-grid event-grid">
-          <input value={eventId} onChange={(event) => onEventId(event.target.value)} placeholder="Event ID" />
-          <input value={password} onChange={(event) => onPassword(event.target.value)} type="password" placeholder="Password" />
-          <button className="primary-button" onClick={onConnect}><Link size={18} /> Link Event</button>
-          {eventId && <button className="danger-button" onClick={onDisconnect}>Disconnect</button>}
-        </div>
+        isLiveMode ? (
+          <div className="connected-event-row">
+            <div><span>Connected Event</span><strong>{eventName || eventId}</strong></div>
+            <button className="danger-button" onClick={onDisconnect}>Disconnect</button>
+          </div>
+        ) : (
+          <div className="settings-grid event-grid">
+            <input value={eventId} onChange={(event) => onEventId(event.target.value)} placeholder="Event ID" />
+            <input value={password} onChange={(event) => onPassword(event.target.value)} type="password" placeholder="Password" />
+            <button className="primary-button" onClick={onConnect}><Link size={18} /> Link Event</button>
+          </div>
+        )
       )}
 
       {!isLiveMode && (
