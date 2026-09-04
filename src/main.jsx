@@ -559,6 +559,8 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
   function disconnectSheet() {
     if (prompt("Enter admin password to disconnect sheet:") !== ADMIN_PASSWORD) return;
     clearLiveConnection();
+    setModal(null);
+    onExit?.();
   }
 
   function clearLiveConnection() {
