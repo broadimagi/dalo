@@ -30,7 +30,7 @@ const API_URL =
 const DEFAULT_THEME_COLOR = "#1683ff";
 const ADMIN_PASSWORD = "Broadimagi";
 const RESERVED_COLUMNS = ["rowId", "Status", "Time", "UID", "status", "time"];
-const ROUTER_SETTING_KEYS = ["isActive", "syncTime", "Masterlist", "Suggestions", "Confirm", "Notify"];
+const ROUTER_SETTING_KEYS = ["isActive", "syncTime", "Masterlist", "Suggestions", "Confirm", "Notify", "eventName", "eventTheme", "qrKey"];
 const DEFAULT_SYNC_SECONDS = 60;
 const MIN_SYNC_SECONDS = 15;
 const MAX_SYNC_SECONDS = 3600;
@@ -70,6 +70,18 @@ const getRouterSyncSeconds = (router) => {
   const value = Number(getCaseInsensitiveValue(router, "syncTime"));
   if (!Number.isFinite(value) || value <= 0) return DEFAULT_SYNC_SECONDS;
   return Math.min(MAX_SYNC_SECONDS, Math.max(MIN_SYNC_SECONDS, Math.round(value)));
+};
+
+const getRouterThemeColor = (router) => {
+  const value = getCaseInsensitiveValue(router, "eventTheme");
+  if (!value) return "";
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    const color = typeof parsed === "string" ? parsed : parsed?.color;
+    return /^#[0-9a-f]{6}$/i.test(String(color || "").trim()) ? String(color).trim() : "";
+  } catch {
+    return /^#[0-9a-f]{6}$/i.test(String(value).trim()) ? String(value).trim() : "";
+  }
 };
 
 const isInactiveError = (error) => /inactive|deactivated/i.test(String(error || ""));
@@ -121,6 +133,8 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
   const [identityUnlocked, setIdentityUnlocked] = useState(false);
   const [eventId, setEventId] = useState(() => forceLocal ? "" : initialEventId);
   const [password, setPassword] = useState(() => forceLocal ? "" : initialPassword);
+  const [eventName, setEventName] = useState("");
+  const [qrColumn, setQrColumn] = useState("");
   const [syncTimeSeconds, setSyncTimeSeconds] = useState(DEFAULT_SYNC_SECONDS);
   const [hasImageBackground, setHasImageBackground] = useState(() => !!localStorage.getItem("customThemePicture"));
   const csvInputRef = useRef(null);
@@ -350,18 +364,23 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     reader.readAsText(file);
   }
 
-  function searchGuest(rawValue) {
+  function searchGuest(rawValue, columnOverride = null, exactOnly = false) {
     if (!masterlist.length) {
       openModal("message", "Not Found", { message: "No data has been uploaded or linked." });
       return;
     }
     const value = rawValue.toLowerCase().trim();
     if (!value) return;
-    const searchColumns = dataColumns(settings.suggestionColumns);
+    const searchColumns = Array.isArray(columnOverride) && columnOverride.length
+      ? columnOverride
+      : dataColumns(settings.suggestionColumns);
     const matches = masterlist
       .map((row, index) => ({ row, index }))
       .filter(({ row }) =>
-        searchColumns.some((column) => String(row[column] || "").toLowerCase().includes(value))
+        searchColumns.some((column) => {
+          const candidate = String(row[column] || "").toLowerCase().trim();
+          return exactOnly ? candidate === value : candidate.includes(value);
+        })
       )
       .sort((a, b) => {
         const bExact = searchColumns.some((column) => String(b.row[column] || "").toLowerCase() === value);
@@ -383,7 +402,11 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
 
   function handleQrScan(value) {
     setQuery(value);
-    searchGuest(value);
+    if (isLiveMode && !qrColumn) {
+      openModal("message", "QR Not Configured", { message: "This event does not have a valid QR key column." });
+      return;
+    }
+    searchGuest(value, isLiveMode ? [qrColumn] : null, isLiveMode);
   }
 
   function selectSuggestion(index) {
@@ -419,6 +442,13 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
         return;
       }
       setSyncTimeSeconds(getRouterSyncSeconds(payload.router));
+      setEventName(String(getCaseInsensitiveValue(payload.router, "eventName") || "").trim());
+      const indexedColumns = Array.isArray(payload.headers) && payload.headers.length
+        ? payload.headers
+        : Object.keys(payload.rows[0] || {}).filter((key) => !RESERVED_COLUMNS.includes(key));
+      setQrColumn(columnsFromRouterValue(getCaseInsensitiveValue(payload.router, "qrKey"), indexedColumns, true)[0] || "");
+      const eventColor = getRouterThemeColor(payload.router);
+      if (eventColor) applyColorEngine(eventColor, false);
       localStorage.setItem("connectedEventId", nextEventId);
       localStorage.setItem("connectedPassword", nextPassword);
       setEventId(nextEventId);
@@ -461,6 +491,13 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
         return;
       }
       setSyncTimeSeconds(getRouterSyncSeconds(payload.router));
+      setEventName(String(getCaseInsensitiveValue(payload.router, "eventName") || "").trim());
+      const heartbeatColumns = Array.isArray(payload.headers) && payload.headers.length
+        ? payload.headers
+        : Object.keys(payload.rows[0] || {}).filter((key) => !RESERVED_COLUMNS.includes(key));
+      setQrColumn(columnsFromRouterValue(getCaseInsensitiveValue(payload.router, "qrKey"), heartbeatColumns, true)[0] || "");
+      const eventColor = getRouterThemeColor(payload.router);
+      if (eventColor) applyColorEngine(eventColor, false);
       const freshData = payload.rows;
       const localMap = new Map(masterlist.map((row) => [String(row.rowId), row]));
       freshData.forEach((freshRow) => {
@@ -494,7 +531,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
         }
         const response = await fetch(API_URL, {
           method: "POST",
-          body: JSON.stringify({ eventId, password, rowId: targetGuest.rowId, status: "Checked", time, operator: deviceId })
+          body: JSON.stringify({ eventId, password, rowId: targetGuest.rowId, status: "Checked-in", time, operator: deviceId })
         });
         const result = await response.json();
         if (!result.success) {
@@ -507,7 +544,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
       }
     }
     const nextRows = masterlist.map((row, index) =>
-      index === currentIndex ? { ...row, Status: "Checked", Time: time, UID: deviceId } : row
+      index === currentIndex ? { ...row, Status: "Checked-in", Time: time, UID: deviceId } : row
     );
     setMasterlist(nextRows);
     notifyCheckIn(nextRows[currentIndex]);
@@ -568,8 +605,11 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     localStorage.removeItem("connectedPassword");
     setEventId("");
     setPassword("");
+    setEventName("");
+    setQrColumn("");
     setIsLiveMode(false);
     setMasterlist(getInitial("masterlist", []));
+    applyColorEngine(settings.currentThemeColor || DEFAULT_THEME_COLOR, false);
   }
 
   function leaveApp() {
@@ -640,7 +680,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
         )}
         <div className="checkin-panel">
           <div>
-            <h1 id="checkin-title">My Attendance / My Presence</h1>
+            <h1 id="checkin-title">{isLiveMode && eventName ? eventName : "My Attendance / My Presence"}</h1>
           </div>
           <form onSubmit={checkName} className="search-form">
             <div className="search-box">
@@ -1211,7 +1251,6 @@ function AuthPage() {
         <div className="auth-card">
           <div className="access-icon"><Lock size={23} /></div>
           <p className="card-kicker">Secure event access</p>
-          <h1>One last step.</h1>
           <p>Enter the password for <strong>{eventId || "this event"}</strong> to open its live attendance workspace.</p>
           <form onSubmit={submit}>
             <label htmlFor="event-password">Event password</label>
