@@ -30,7 +30,7 @@ const API_URL =
 const DEFAULT_THEME_COLOR = "#1683ff";
 const ADMIN_PASSWORD = "Broadimagi";
 const RESERVED_COLUMNS = ["rowId", "Status", "Time", "UID", "status", "time"];
-const ROUTER_SETTING_KEYS = ["isActive", "syncTime", "notificationTime", "Masterlist", "Suggestions", "Confirm", "Notify", "eventName", "eventTheme", "qrKey"];
+const ROUTER_SETTING_KEYS = ["isActive", "syncTime", "notificationTime", "Masterlist", "Suggestions", "Confirm", "Notify", "eventName", "eventTheme", "qrKey", "qrActive"];
 const DEFAULT_SYNC_SECONDS = 600;
 const DEFAULT_NOTIFICATION_SECONDS = 15;
 const MIN_SYNC_SECONDS = 15;
@@ -143,6 +143,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
   const [password, setPassword] = useState(() => forceLocal ? "" : initialPassword);
   const [eventName, setEventName] = useState("");
   const [qrColumn, setQrColumn] = useState("");
+  const [qrEnabled, setQrEnabled] = useState(true);
   const [syncTimeSeconds, setSyncTimeSeconds] = useState(DEFAULT_SYNC_SECONDS);
   const [notificationTimeSeconds, setNotificationTimeSeconds] = useState(DEFAULT_NOTIFICATION_SECONDS);
   const [hasImageBackground, setHasImageBackground] = useState(() => !!localStorage.getItem("customThemePicture"));
@@ -423,6 +424,28 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
       openModal("message", "QR Not Configured", { message: "This event does not have a valid QR key column." });
       return;
     }
+    if (isLiveMode) {
+      const qrValue = String(value).trim().toLowerCase();
+      const matches = masterlist
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => String(row[qrColumn] || "").trim().toLowerCase() === qrValue);
+      if (matches.length !== 1) {
+        openModal("message", matches.length ? "Duplicate QR Key" : "QR Not Found", {
+          message: matches.length
+            ? "This QR key belongs to more than one guest and cannot be checked in automatically."
+            : "No guest was found for this QR code."
+        });
+        return;
+      }
+      const match = matches[0];
+      if (isChecked(match.row)) {
+        openModal("message", "Already Checked In", { message: "This guest has already been checked in." });
+        return;
+      }
+      setCurrentIndex(match.index);
+      checkIn(match.index, true);
+      return;
+    }
     searchGuest(value, isLiveMode ? [qrColumn] : null, isLiveMode);
   }
 
@@ -466,6 +489,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
         ? payload.headers
         : Object.keys(payload.rows[0] || {}).filter((key) => !RESERVED_COLUMNS.includes(key));
       setQrColumn(columnsFromRouterValue(getCaseInsensitiveValue(payload.router, "qrKey"), indexedColumns, true)[0] || "");
+      setQrEnabled(isRouterActive({ isActive: getCaseInsensitiveValue(payload.router, "qrActive") }));
       const eventColor = getRouterThemeColor(payload.router);
       if (eventColor) applyColorEngine(eventColor, false);
       localStorage.setItem("connectedEventId", nextEventId);
@@ -517,6 +541,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
         ? payload.headers
         : Object.keys(payload.rows[0] || {}).filter((key) => !RESERVED_COLUMNS.includes(key));
       setQrColumn(columnsFromRouterValue(getCaseInsensitiveValue(payload.router, "qrKey"), heartbeatColumns, true)[0] || "");
+      setQrEnabled(isRouterActive({ isActive: getCaseInsensitiveValue(payload.router, "qrActive") }));
       const eventColor = getRouterThemeColor(payload.router);
       if (eventColor) applyColorEngine(eventColor, false);
       const freshData = payload.rows;
@@ -562,9 +587,9 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     }
   }
 
-  async function checkIn() {
-    if (currentIndex === null) return;
-    const targetGuest = masterlist[currentIndex];
+  async function checkIn(indexOverride = currentIndex, returnToScanner = false) {
+    if (!Number.isInteger(indexOverride)) return;
+    const targetGuest = masterlist[indexOverride];
     let time = new Date().toLocaleString();
     if (isLiveMode) {
       openModal("message", "Verifying", { message: "Checking database state..." });
@@ -595,11 +620,11 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
       }
     }
     const nextRows = masterlist.map((row, index) =>
-      index === currentIndex ? { ...row, Status: "Checked-in", Time: time, UID: deviceId } : row
+      index === indexOverride ? { ...row, Status: "Checked-in", Time: time, UID: deviceId } : row
     );
     setMasterlist(nextRows);
-    notifyCheckIn(nextRows[currentIndex]);
-    openModal("success", "Checked-In Successfully", { guestIndex: currentIndex, time });
+    notifyCheckIn(nextRows[indexOverride]);
+    openModal("success", "Checked-In Successfully", { guestIndex: indexOverride, time, returnToScanner });
   }
 
   function notifyCheckIn(row) {
@@ -610,10 +635,14 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     setTimeout(() => setToastItems((items) => items.filter((item) => item.id !== id)), 8000);
   }
 
-  function afterCheckIn() {
+  function afterCheckIn(returnToScanner = false) {
     setQuery("");
     setCurrentIndex(null);
-    closeModal();
+    if (returnToScanner) {
+      openModal("scanner", "Scan Guest QR Code");
+    } else {
+      closeModal();
+    }
   }
 
   function download() {
@@ -658,6 +687,7 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
     setPassword("");
     setEventName("");
     setQrColumn("");
+    setQrEnabled(true);
     updateCursorRef.current = 0;
     setIsLiveMode(false);
     setMasterlist(getInitial("masterlist", []));
@@ -752,9 +782,10 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
           <button
             className="scan-button scan-button-wide"
             type="button"
+            disabled={isLiveMode && !qrEnabled}
             onClick={() => openModal("scanner", "Scan Guest QR Code")}
           >
-            <ScanLine size={19} /> Scan QR
+            <ScanLine size={19} /> {isLiveMode && !qrEnabled ? "QR Disabled" : "Scan QR"}
           </button>
         </div>
       </section>
@@ -785,11 +816,11 @@ function AttendanceApp({ initialEventId = "", initialPassword = "", forceLocal =
               columns={dataColumns(settings.confirmColumns)}
               checked={isChecked(masterlist[modal.guestIndex])}
               onBack={() => checkName({ preventDefault() {} })}
-              onConfirm={checkIn}
+              onConfirm={() => checkIn()}
             />
           )}
           {modal.type === "success" && (
-            <SuccessModal row={masterlist[modal.guestIndex]} columns={dataColumns(settings.confirmColumns)} time={modal.time} onDone={afterCheckIn} />
+            <SuccessModal row={masterlist[modal.guestIndex]} columns={dataColumns(settings.confirmColumns)} time={modal.time} autoResume={modal.returnToScanner} onDone={() => afterCheckIn(modal.returnToScanner)} />
           )}
           {modal.type === "settings" && (
             <SettingsModal
@@ -875,6 +906,7 @@ function QrScanner({ onScan }) {
   const videoRef = useRef(null);
   const onScanRef = useRef(onScan);
   const [status, setStatus] = useState("Starting camera...");
+  const [facingMode, setFacingMode] = useState("environment");
 
   useEffect(() => {
     onScanRef.current = onScan;
@@ -885,6 +917,7 @@ function QrScanner({ onScan }) {
     let stopped = false;
 
     async function startScanner() {
+      setStatus("Starting camera...");
       if (!navigator.mediaDevices?.getUserMedia) {
         setStatus("Camera access is not available on this device.");
         return;
@@ -896,7 +929,7 @@ function QrScanner({ onScan }) {
         });
         setStatus("Point the camera at the guest QR code.");
         controls = await reader.decodeFromConstraints(
-          { video: { facingMode: { ideal: "environment" } }, audio: false },
+          { video: { facingMode: { ideal: facingMode } }, audio: false },
           videoRef.current,
           (result, _error, scanControls) => {
             const value = result?.getText()?.trim();
@@ -920,13 +953,22 @@ function QrScanner({ onScan }) {
       stopped = true;
       controls?.stop();
     };
-  }, []);
+  }, [facingMode]);
 
   return (
     <div className="qr-scanner">
       <div className="qr-video-wrap">
         <video ref={videoRef} className="qr-video" playsInline muted />
         <div className="qr-guide" aria-hidden="true" />
+        <button
+          className="camera-switch"
+          type="button"
+          aria-label={`Use ${facingMode === "environment" ? "front" : "rear"} camera`}
+          title={`Use ${facingMode === "environment" ? "front" : "rear"} camera`}
+          onClick={() => setFacingMode((current) => current === "environment" ? "user" : "environment")}
+        >
+          <RefreshCw size={16} />
+        </button>
       </div>
       <p className="qr-status">{status}</p>
     </div>
@@ -1029,7 +1071,19 @@ function ConfirmationModal({ row, columns, checked, onBack, onConfirm }) {
   );
 }
 
-function SuccessModal({ row, columns, time, onDone }) {
+function SuccessModal({ row, columns, time, onDone, autoResume = false }) {
+  const onDoneRef = useRef(onDone);
+
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
+
+  useEffect(() => {
+    if (!autoResume) return undefined;
+    const timer = setTimeout(() => onDoneRef.current(), 5000);
+    return () => clearTimeout(timer);
+  }, [autoResume]);
+
   return (
     <div className="success-layout">
       <div className="success-icon"><Check size={38} /></div>

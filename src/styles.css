@@ -537,6 +537,12 @@ h1 {
   width: 100%;
 }
 
+.scan-button:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+  filter: grayscale(1);
+}
+
 .footer {
   position: relative;
   z-index: 2;
@@ -636,6 +642,30 @@ h1 {
   border: 3px solid #7dd3fc;
   border-radius: 14px;
   box-shadow: 0 0 0 999px rgba(2, 6, 23, 0.38);
+}
+
+.camera-switch {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .55);
+  border-radius: 50%;
+  color: #ffffff;
+  background: rgba(10, 13, 18, .68);
+  backdrop-filter: blur(8px);
+}
+
+.camera-switch:hover,
+.camera-switch:focus-visible {
+  background: rgba(10, 13, 18, .88);
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
 }
 
 .qr-status {

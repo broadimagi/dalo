@@ -15,7 +15,8 @@ const REQUIRED_ROUTER_HEADERS = [
   "suggestions",
   "confirm",
   "notify",
-  "qrKey"
+  "qrKey",
+  "qrActive"
 ];
 
 const DEFAULT_SYNC_SECONDS = 600;
@@ -148,7 +149,8 @@ function getRouterRecord(eventId, password) {
       suggestions: matchedRow[indexes.suggestions],
       confirm: matchedRow[indexes.confirm],
       notify: matchedRow[indexes.notify],
-      qrKey: matchedRow[indexes.qrKey]
+      qrKey: matchedRow[indexes.qrKey],
+      qrActive: parseIsActive(matchedRow[indexes.qrActive])
     }
   };
 }
